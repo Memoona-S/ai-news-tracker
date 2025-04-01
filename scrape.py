@@ -15,7 +15,7 @@ def scrape_articles():
     websites = [
         {
             "name": "Reuters Tech",
-            "url": "https://www.reuters.com/technology",
+            "url": "https://www.reuters.com/technology/artificial-intelligence",
             "link_selector": "a[data-testid='Heading']",
             "date_selector": "time"  # Reuters uses <time> element
         }
