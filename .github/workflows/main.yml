@@ -1,8 +1,8 @@
-name: Scrape Articles Daily
+name: Daily Article Scraper
 on:
   schedule:
-    - cron: '0 12 * * *'  # Runs at 12 PM UTC daily
-  workflow_dispatch:  # Enable manual runs
+    - cron: '0 8 * * *'  # Run at 8 AM UTC
+  workflow_dispatch:
 
 jobs:
   scrape:
@@ -15,10 +15,10 @@ jobs:
           python-version: '3.10'
       - name: Install dependencies
         run: pip install -r requirements.txt
-      - name: Run scraper
+      - name: Run today's scraper
         run: python scrape.py
       - name: Upload results
-        uses: actions/upload-artifact@v4  # Critical fix
+        uses: actions/upload-artifact@v4
         with:
-          name: articles
+          name: todays-articles
           path: articles.csv
