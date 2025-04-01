@@ -1,8 +1,9 @@
-name: Scrape Articles
+name: Scrape Articles Daily
 on:
   schedule:
-    - cron: '0 12 * * *'  # 12 PM UTC daily
-  workflow_dispatch:  # ← THIS ENABLES MANUAL RUNS
+    - cron: '0 12 * * *'  # Runs at 12 PM UTC daily
+  workflow_dispatch:  # Enable manual runs
+
 jobs:
   scrape:
     runs-on: ubuntu-latest
@@ -17,7 +18,7 @@ jobs:
       - name: Run scraper
         run: python scrape.py
       - name: Upload results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4  # Critical fix
         with:
           name: articles
           path: articles.csv
