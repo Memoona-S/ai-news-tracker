@@ -1,64 +1,64 @@
 import requests
 from bs4 import BeautifulSoup
 import csv
-from urllib.parse import urljoin
 from datetime import datetime
+from urllib.parse import urljoin
 
-headers = {'User-Agent': 'Mozilla/5.0'}
-TODAY = datetime.now().strftime('%Y-%m-%d')  # Format: 2023-11-15
+# Configure for Reuters AI section
+TODAY = datetime.now().strftime('%Y-%m-%d')
+HEADERS = {'User-Agent': 'Mozilla/5.0'}
+URL = "https://www.reuters.com/technology/artificial-intelligence/"
 
-def is_today(timestamp_str):
-    """Check if article was published today"""
-    return timestamp_str and TODAY in timestamp_str
-
-def scrape_articles():
-    websites = [
-        {
-            "name": "Reuters Tech",
-            "url": "https://www.reuters.com/technology/artificial-intelligence",
-            "link_selector": "a[data-testid='Heading']",
-            "date_selector": "time"  # Reuters uses <time> element
-        }
-    ]
-    
+def scrape_reuters_ai():
     articles = []
-    for site in websites:
-        try:
-            response = requests.get(site["url"], headers=headers)
-            soup = BeautifulSoup(response.text, 'html.parser')
+    try:
+        response = requests.get(URL, headers=HEADERS, timeout=10)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Find all article cards on the page
+        for article in soup.select('[data-testid="MediaStoryCard"]'):
+            # Extract URL
+            link = article.select_one('a[data-testid="Heading"]')
+            if not link or not link.get('href'):
+                continue
             
-            # Find all article containers
-            articles_html = soup.select('[data-testid="MediaStoryCard"]')  # Reuters specific
+            full_url = urljoin(URL, link['href'])
             
-            for article in articles_html:
-                # Extract link
-                link = article.select_one(site["link_selector"])
-                if not link or not link.has_attr('href'):
-                    continue
+            # Extract publish date (from <time> tag)
+            time_tag = article.select_one('time')
+            if not time_tag or not time_tag.get('datetime'):
+                continue
                 
-                url = urljoin(site["url"], link['href'])
+            pub_date = time_tag['datetime'].split('T')[0]  # Get YYYY-MM-DD
+            
+            # Only keep today's articles
+            if pub_date == TODAY:
+                articles.append({
+                    "title": link.get_text(strip=True),
+                    "url": full_url,
+                    "date": pub_date,
+                    "scraped_at": datetime.now().isoformat()
+                })
                 
-                # Extract date (format varies by site)
-                date_element = article.select_one(site["date_selector"])
-                pub_date = date_element['datetime'] if date_element else None
-                
-                # Only keep today's articles
-                if is_today(pub_date):
-                    articles.append({
-                        "site": site["name"],
-                        "url": url,
-                        "date": pub_date,
-                        "scraped_at": datetime.now().strftime('%Y-%m-%d %H:%M')
-                    })
-                    
-        except Exception as e:
-            print(f"Error scraping {site['name']}: {str(e)}")
+    except Exception as e:
+        print(f"Error: {str(e)}")
     
     return articles
 
+# Test immediately
 if __name__ == "__main__":
-    today_articles = scrape_articles()
-    with open('articles.csv', 'w', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=["site", "url", "date", "scraped_at"])
-        writer.writeheader()
-        writer.writerows(today_articles)
+    print(f"Scraping Reuters AI articles for {TODAY}...")
+    articles = scrape_reuters_ai()
+    
+    if articles:
+        print(f"Found {len(articles)} new articles:")
+        for article in articles:
+            print(f"- {article['title']}\n  {article['url']}")
+        
+        # Save to CSV
+        with open('reuters_ai_today.csv', 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=["title", "url", "date", "scraped_at"])
+            writer.writeheader()
+            writer.writerows(articles)
+    else:
+        print("No new articles found today.")
