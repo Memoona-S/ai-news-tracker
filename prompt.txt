@@ -1,0 +1,4 @@
+Check and retrieve all new articles in current date on this website:
+{{URL}}
+
+Provide a table with columns: Title | Summary | Publication Time (UTC) | Source
