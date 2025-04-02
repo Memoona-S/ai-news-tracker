@@ -2,15 +2,15 @@ name: Run AI News Tracker
 
 on:
   schedule:
-    - cron: '0 */3 * * *'  # 🔁 Runs every 3 hours
-  workflow_dispatch:       # ▶️ Allows manual run from GitHub UI
+    - cron: '0 */3 * * *'  # Every 3 hours
+  workflow_dispatch:
 
 jobs:
-  track-news:
+  run-script:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout code
         uses: actions/checkout@v3
 
       - name: Set up Python
@@ -19,10 +19,9 @@ jobs:
           python-version: '3.10'
 
       - name: Install dependencies
-        run: |
-          pip install openai gspread oauth2client
+        run: pip install -r requirements.txt
 
-      - name: Run script
+      - name: Run tracker script
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
