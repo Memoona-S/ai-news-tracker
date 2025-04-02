@@ -1,4 +1,10 @@
-Check and retrieve all new articles in current date on this website:
-{{URL}}
+You are given raw visible text from news website.
 
-Provide a table with columns: Title | Summary | Publication Time (UTC) | Source
+From following content scraped from: {{URL}}, extract today's articles.
+
+Format the response in a table:
+Title | Summary | Publication Time (UTC) | Source (Link)
+
+Here is the content:
+
+{{CONTENT}}
