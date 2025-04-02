@@ -1,36 +1,36 @@
 import os
-import openai
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
+from openai import OpenAI
+from oauth2client.service_account import ServiceAccountCredentials
 
-# === 🔐 Load secrets from GitHub Actions ===
-openai.api_key = os.getenv("OPENAI_API_KEY")
-creds_dict = eval(os.getenv("GOOGLE_CREDENTIALS_JSON"))
+# === 🔐 Load OpenAI Client (v1.0+ syntax)
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# === 📊 Connect to Google Sheets ===
+# === 📊 Google Sheets Setup
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds_dict = eval(os.getenv("GOOGLE_CREDENTIALS_JSON"))
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-client = gspread.authorize(creds)
-sheet = client.open("AI News Tracker").worksheet("Articles")
+client_gsheets = gspread.authorize(creds)
+sheet = client_gsheets.open("AI News Tracker").worksheet("Articles")
 
-# === 📥 Load sites and prompt ===
+# === 📥 Load URLs and Prompt Template
 with open("Sites.txt", "r") as f:
     urls = [line.strip() for line in f if line.strip()]
 
 with open("prompt.txt", "r") as f:
     prompt_template = f.read().strip()
 
-# === 🧠 Run GPT-4o on each site ===
+# === 🧠 Loop Through Each Site
 for url in urls:
     final_prompt = prompt_template.replace("{{URL}}", url)
     print(f"🔍 Checking: {url}")
 
     try:
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are an AI that summarizes news articles into clean tables."},
+                {"role": "system", "content": "You are an AI that summarizes news articles into a structured table."},
                 {"role": "user", "content": final_prompt}
             ],
             temperature=0.2
@@ -39,12 +39,13 @@ for url in urls:
         result = response.choices[0].message.content.strip()
         print("🧾 GPT Result:\n", result)
 
-        # === ✂️ Parse GPT table (skip header) ===
+        # === ✂️ Parse Table Output
         rows = result.split("\n")
         data_rows = rows[1:]  # skip header
 
         for row in data_rows:
-            if not row.strip(): continue
+            if not row.strip():
+                continue
             columns = [col.strip() for col in row.split("|")]
             if len(columns) >= 4:
                 sheet.append_row([
@@ -56,7 +57,7 @@ for url in urls:
                     columns[3],  # Source
                 ])
             else:
-                print(f"⚠️ Skipped row (not 4+ columns): {row}")
+                print(f"⚠️ Skipped row (less than 4 columns): {row}")
 
         print(f"✅ Added {len(data_rows)} rows from {url}\n")
 
