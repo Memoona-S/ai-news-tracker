@@ -33,7 +33,7 @@ with open("prompt.txt") as f:
 
 # === Load existing links ===
 try:
-    existing_links = set(sheet.col_values(3))
+    existing_links = set(sheet.col_values(4))  # 4th column = Link
     print(f"📌 Loaded {len(existing_links)} existing links.")
 except Exception as e:
     print(f"⚠️ Could not load existing links: {e}")
@@ -68,6 +68,7 @@ def extract_links(soup, url):
 for url in urls:
     print(f"\n🔍 Scraping: {url}")
     domain = get_domain(url)
+    source_name = domain.split(".")[0].capitalize()
 
     try:
         res = requests.get(url, timeout=10)
@@ -77,7 +78,8 @@ for url in urls:
         links = extract_links(soup, url)
 
         if not links:
-            print("⚠️ No links found. Skipping.")
+            print("⚠️ No links found. Writing fallback row.")
+            sheet.append_row(["No articles", f"No articles found for {datetime.now().strftime('%Y-%m-%d')}", f"", source_name])
             continue
 
         print("🔗 Found links:")
@@ -112,12 +114,15 @@ for url in urls:
                 print(f"⏩ Skipped: {link}")
                 continue
 
-            sheet.append_row([title, summary, link])
+            sheet.append_row([title, summary, link, source_name])
             existing_links.add(link)
             total_added += 1
             added += 1
 
-        print(f"✅ {added} new articles from {url}")
+        if added == 0:
+            sheet.append_row(["No articles", f"No articles found for {datetime.now().strftime('%Y-%m-%d')}", "", source_name])
+        else:
+            print(f"✅ {added} new articles from {url}")
 
     except Exception as e:
         print(f"❌ Error on {url}: {e}")
