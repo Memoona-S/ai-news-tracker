@@ -1,9 +1,11 @@
 You are given raw visible text from news website.
 
 From following content scraped from: {{URL}}, extract today's top 5 articles.
+From these, extract only the most recent articles with links. Return them in a table:
 
-Format the response in a table:
-Title | Summary | Publication Time (UTC) | Source (Link)
+Title | Summary | Link
+
+Only include full, direct article links.
 
 Here is the content:
 
