@@ -1,6 +1,6 @@
 {
   "techcrunch.com": {
-    "selector": "h2.post-block__title > a"
+    "selector": "a.post-block__title__link"
   },
   "analyticsindiamag.com": {
     "selector": "h3.jeg_post_title > a"
