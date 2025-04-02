@@ -6,33 +6,33 @@ from datetime import datetime
 from bs4 import BeautifulSoup
 from oauth2client.service_account import ServiceAccountCredentials
 
-# === 🔐 Load API secrets
+# === STEP 1: Load API secrets ===
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 creds_dict = eval(os.getenv("GOOGLE_CREDENTIALS_JSON"))
 
-# === 📊 Google Sheets setup
+# === STEP 2: Connect to Google Sheets ===
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 gsheet = gspread.authorize(creds)
 sheet = gsheet.open("AI News Tracker").worksheet("Articles")
 
-# === ⚡ Fetch all existing links once at start
+# === STEP 3: Fetch existing links to avoid duplicates ===
 existing_links = set()
 try:
-    link_column = sheet.col_values(3)  # 3rd column is 'Link'
+    link_column = sheet.col_values(3)  # Column C = Link
     existing_links = set(link_column)
-    print(f"📌 Loaded {len(existing_links)} existing links to check for duplicates")
+    print(f"📌 Loaded {len(existing_links)} existing links")
 except Exception as e:
-    print(f"⚠️ Could not load existing links: {e}")
+    print(f"⚠️ Couldn't load existing links: {e}")
 
-# === 📄 Load URLs and Prompt Template
+# === STEP 4: Load site URLs and prompt ===
 with open("Sites.txt", "r") as f:
     urls = [line.strip() for line in f if line.strip()]
 
 with open("prompt.txt", "r") as f:
     prompt_template = f.read().strip()
 
-# === 🚀 Process each site
+# === STEP 5: Process each website ===
 for url in urls:
     print(f"\n🔍 Scraping: {url}")
 
@@ -41,27 +41,28 @@ for url in urls:
         res.raise_for_status()
         soup = BeautifulSoup(res.text, "html.parser")
 
-        # Extract Top 10 links
+        # STEP 5A: Extract top 10 visible links with titles
         links = []
         for a in soup.find_all("a", href=True):
             text = a.get_text().strip()
             if text and len(text) > 10 and not a['href'].startswith("#"):
                 full_url = requests.compat.urljoin(url, a['href'])
-                links.append(f"{text} - {full_url}")
+                links.append(f"{text} | {full_url}")  # Clean format for GPT
             if len(links) >= 10:
                 break
 
         if not links:
-            print(f"⚠️ No visible links found.")
+            print("⚠️ No visible article links found.")
             continue
 
-        content = "\n".join(links)
-        final_prompt = prompt_template.replace("{{URL}}", url).replace("{{CONTENT}}", content)
+        # STEP 5B: Inject links into GPT prompt
+        link_block = "\n".join(links)
+        final_prompt = prompt_template.replace("{{URL}}", url).replace("{{CONTENT}}", link_block)
 
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are an AI that extracts article titles, summaries, and links from a list of articles."},
+                {"role": "system", "content": "You extract article titles, summaries, and links."},
                 {"role": "user", "content": final_prompt}
             ],
             temperature=0.2
@@ -70,25 +71,33 @@ for url in urls:
         result = response.choices[0].message.content.strip()
         print("🧾 GPT Response:\n", result)
 
-        # === ✂️ Parse GPT table
-        rows = result.split("\n")[1:]
+        # STEP 5C: Parse GPT table output
+        lines = result.split("\n")[1:]  # Skip header
 
         added_count = 0
-        for row in rows:
-            if not row.strip(): continue
-            columns = [c.strip() for c in row.split("|")]
-            if len(columns) >= 3:
-                title, summary, link = columns[0], columns[1], columns[2]
-                if link in existing_links:
-                    print(f"⏩ Skipped duplicate link: {link}")
-                    continue
-                sheet.append_row([title, summary, link])
-                existing_links.add(link)
-                added_count += 1
-            else:
-                print(f"⚠️ Skipped row (not 3+ columns): {row}")
+        for line in lines:
+            if not line.strip(): continue
+            columns = [c.strip() for c in line.split("|")]
+            
+            if len(columns) != 3:
+                print(f"⚠️ Skipped (invalid column count): {line}")
+                continue
+
+            title, summary, link = columns
+
+            if not link.startswith("http"):
+                print(f"⚠️ Skipped (invalid link): {link}")
+                continue
+
+            if link in existing_links:
+                print(f"⏩ Skipped duplicate: {link}")
+                continue
+
+            sheet.append_row([title, summary, link])
+            existing_links.add(link)
+            added_count += 1
 
         print(f"✅ Added {added_count} new article(s) from {url}")
 
     except Exception as e:
-        print(f"❌ Error on {url}: {e}")
+        print(f"❌ Error while processing {url}: {e}")
