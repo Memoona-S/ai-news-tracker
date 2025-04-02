@@ -1,6 +1,6 @@
 You are given raw visible text from news website.
 
-From following content scraped from: {{URL}}, extract today's articles.
+From following content scraped from: {{URL}}, extract today's top 5 articles.
 
 Format the response in a table:
 Title | Summary | Publication Time (UTC) | Source (Link)
