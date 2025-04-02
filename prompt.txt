@@ -1,12 +1,13 @@
-You are given raw visible text from news website.
+You are given the top 10 article titles and full links from the website {{URL}}.
 
-From following content scraped from: {{URL}}, extract today's top 5 articles.
-From these, extract only the most recent articles with links. Return them in a table:
+Your task is to extract the most recent articles and summarize them.
 
+Return your response in EXACTLY this format:
 Title | Summary | Link
 
-Only include full, direct article links.
+- Each row must contain all 3 columns.
+- The link must be a valid, full URL.
+- Do NOT include extra rows, headers, or descriptions.
 
 Here is the content:
-
 {{CONTENT}}
