@@ -1,6 +1,3 @@
-# Updated main.py with correct domain extraction logic for Brave query building
-
-fixed_brave_script = """
 import os
 import requests
 from datetime import datetime
@@ -18,7 +15,7 @@ def setup_google_sheets():
 
 # === Call Brave Search API ===
 def search_brave(query):
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = os.getenv("OPENAI_API_KEY")  # Brave key stored under OpenAI variable
     url = "https://api.search.brave.com/res/v1/web/search"
     headers = {
         "Accept": "application/json",
@@ -40,7 +37,7 @@ def update_articles_sheet(sheet, articles):
     existing_links = set(sheet.col_values(4))
     last_row = len(sheet.get_all_values()) + 2
     today = datetime.now().strftime("%Y-%m-%d")
-    sheet.update(f"A{last_row}:D{last_row}", [[""]*4])
+    sheet.update(f"A{last_row}:D{last_row}", [[""] * 4])
     last_row += 1
     for article in articles:
         if article['url'] not in existing_links:
@@ -57,7 +54,7 @@ def log_result(sheet, query, status, message):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     sheet.append_row([timestamp, query, status, message])
 
-# === Main ===
+# === Main Execution ===
 def main():
     spreadsheet = setup_google_sheets()
     sites_sheet = spreadsheet.worksheet("Sites")
@@ -69,8 +66,10 @@ def main():
         log_result(log_sheet, "N/A", "⚠️ No Sites", "No site URLs found in Sites sheet.")
         return
 
-    # ✅ Extract only the domain part
-    query = "AI articles " + " OR ".join([f"site:{url.split('/')[2]}" for url in site_urls if url.startswith("http")])
+    # ✅ Extract just the domain name from each URL
+    domains = [f"site:{url.split('/')[2]}" for url in site_urls if url.startswith("http")]
+    query = "AI articles " + " OR ".join(domains)
+
     try:
         results = search_brave(query)
         if results:
@@ -83,8 +82,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-"""
-
-# Save the fixed version to main.py
-with open("/mnt/data/main.py", "w") as f:
-    f.write(fixed_brave_script.strip())
