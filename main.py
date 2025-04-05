@@ -15,7 +15,7 @@ def setup_google_sheets():
 
 # === Call Brave Search API ===
 def search_brave(query):
-    api_key = os.getenv("OPENAI_API_KEY")  # using same key name for Brave
+    api_key = os.getenv("OPENAI_API_KEY")  # Using Brave key via OPENAI_API_KEY env
     url = "https://api.search.brave.com/res/v1/web/search"
     headers = {
         "Accept": "application/json",
@@ -32,16 +32,18 @@ def search_brave(query):
     else:
         raise Exception(f"Brave API error: {response.status_code} - {response.text}")
 
-# === Update Articles Sheet (only from allowed domains) ===
-def update_articles_sheet(sheet, articles, allowed_domains):
-    existing_links = set(sheet.col_values(4))
+# === Update Articles Sheet (filter + dedupe + logging) ===
+def update_articles_sheet(sheet, articles, allowed_domains, log_sheet):
+    existing_links = set(sheet.col_values(4))  # Column D contains URLs
     last_row = len(sheet.get_all_values()) + 2
     today = datetime.now().strftime("%Y-%m-%d")
-    sheet.update(f"A{last_row}:D{last_row}", [[""] * 4])
+    sheet.update(f"A{last_row}:D{last_row}", [[""] * 4])  # Insert line gap by date
     last_row += 1
+    pushed = 0
     for article in articles:
         url = article['url']
-        if url not in existing_links and any(domain in url for domain in allowed_domains):
+        matched = [domain for domain in allowed_domains if domain in url]
+        if url not in existing_links and matched:
             sheet.update(f"A{last_row}:D{last_row}", [[
                 today,
                 url,
@@ -49,8 +51,12 @@ def update_articles_sheet(sheet, articles, allowed_domains):
                 url
             ]])
             last_row += 1
+            pushed += 1
+        elif not matched:
+            log_result(log_sheet, url, "⛔ Skipped (unmatched domain)", article['title'][:80])
+    return pushed
 
-# === Log Run Outcome ===
+# === Log Result ===
 def log_result(sheet, query, status, message):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     sheet.append_row([timestamp, query, status, message])
@@ -73,8 +79,8 @@ def main():
     try:
         results = search_brave(query)
         if results:
-            update_articles_sheet(articles_sheet, results, domains)
-            log_result(log_sheet, query, "✅ Success", f"{len(results)} articles filtered and pushed")
+            pushed_count = update_articles_sheet(articles_sheet, results, domains, log_sheet)
+            log_result(log_sheet, query, "✅ Success", f"{pushed_count} articles pushed after filtering")
         else:
             log_result(log_sheet, query, "⚠️ No Results", "No fresh articles found")
     except Exception as e:
