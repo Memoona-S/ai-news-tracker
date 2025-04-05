@@ -2,7 +2,6 @@ import os
 import requests
 from datetime import datetime
 import gspread
-from urllib.parse import urlparse
 from oauth2client.service_account import ServiceAccountCredentials
 
 # === Setup Google Sheets ===
@@ -33,38 +32,22 @@ def search_brave(query):
     else:
         raise Exception(f"Brave API error: {response.status_code} - {response.text}")
 
-# === Normalize domain from any URL ===
-def extract_domain(url):
-    return urlparse(url).netloc.replace("www.", "").strip().lower()
-
 # === Update Articles Sheet ===
-def update_articles_sheet(sheet, articles, allowed_domains, log_sheet):
+def update_articles_sheet(sheet, articles):
     existing_links = set(sheet.col_values(4))
     last_row = len(sheet.get_all_values()) + 2
     today = datetime.now().strftime("%Y-%m-%d")
-    sheet.update(f"A{last_row}:D{last_row}", [[""] * 4])
+    sheet.update(f"A{last_row}:D{last_row}", [[""]*4])
     last_row += 1
-    pushed = 0
-    skipped = 0
-
     for article in articles:
-        url = article['url']
-        domain = extract_domain(url)
-        allowed_match = domain in allowed_domains
-
-        if url not in existing_links and allowed_match:
+        if article['url'] not in existing_links:
             sheet.update(f"A{last_row}:D{last_row}", [[
                 today,
-                domain,
+                article['url'],
                 article['title'][:150],
-                url
+                article['url']
             ]])
             last_row += 1
-            pushed += 1
-        else:
-            skipped += 1
-            log_result(log_sheet, url, "⛔ Skipped", f"{article['title'][:80]} | domain={domain} allowed={allowed_match}")
-    return pushed, skipped
 
 # === Log Result ===
 def log_result(sheet, query, status, message):
@@ -78,20 +61,18 @@ def main():
     articles_sheet = spreadsheet.worksheet("Articles")
     log_sheet = spreadsheet.worksheet("Log")
 
-    site_urls = sites_sheet.col_values(1)[1:]
+    site_urls = sites_sheet.col_values(1)[1:]  # Skip header
     if not site_urls:
         log_result(log_sheet, "N/A", "⚠️ No Sites", "No site URLs found in Sites sheet.")
         return
 
-    # Extract only the root domains
-    allowed_domains = [extract_domain(url) for url in site_urls if url.startswith("http")]
-    query = "AI articles " + " OR ".join([f"site:{d}" for d in allowed_domains])
-
+    # ✅ Extract only the domain part
+    query = "AI articles " + " OR ".join([f"site:{url.split('/')[2]}" for url in site_urls if url.startswith("http")])
     try:
         results = search_brave(query)
         if results:
-            pushed, skipped = update_articles_sheet(articles_sheet, results, allowed_domains, log_sheet)
-            log_result(log_sheet, query, "✅ Success", f"{pushed} pushed / {skipped} skipped")
+            update_articles_sheet(articles_sheet, results)
+            log_result(log_sheet, query, "✅ Success", f"{len(results)} articles pushed")
         else:
             log_result(log_sheet, query, "⚠️ No Results", "No fresh articles found")
     except Exception as e:
