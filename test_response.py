@@ -8,10 +8,15 @@ response = client.responses.create(
     input=[
         {
             "role": "user",
-            "content": "Search https://techcrunch.com/tag/ai/ and https://openai.com/blog for today's AI articles. Return titles and links."
+            "content": "Search the following sites and return today's AI-related articles with title and link:\n\n1. https://techcrunch.com/tag/ai/\n2. https://openai.com/blog"
         }
     ],
-    tools=["web_search"]
+    tools=[
+        {
+            "type": "tool",
+            "tool": "web_search"
+        }
+    ]
 )
 
 print("📦 GPT RESPONSE:")
