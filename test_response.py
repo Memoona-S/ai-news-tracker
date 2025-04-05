@@ -1,32 +1,82 @@
-from openai import OpenAI
 import os
+import requests
+from datetime import datetime
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# === Setup Google Sheets ===
+def setup_google_sheets():
+    creds_dict = eval(os.getenv("GOOGLE_CREDENTIALS_JSON"))
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    client = gspread.authorize(creds)
+    spreadsheet = client.open("AI News Tracker")
+    return spreadsheet
 
-response = client.responses.create(
-    model="gpt-4o",
-    input=[
-        {
-            "role": "user",
-            "content": "Search https://techcrunch.com/category/artificial-intelligence/ and https://analyticsindiamag.com/ai-news-updates/ for AI articles published today. Return a bullet list of article titles and links. Only return the final answer. Do not include tool calls or say you searched the web. Just the final list.."
-        }
-    ],
-    tool_choice="auto",
-    tools=[
-        {
-            "type": "web_search"
-        }
-    ]
-)
+# === Call Brave Search API ===
+def search_brave(query):
+    api_key = os.getenv("OPENAI_API_KEY")
+    url = "https://api.search.brave.com/res/v1/web/search"
+    headers = {
+        "Accept": "application/json",
+        "X-Subscription-Token": api_key
+    }
+    params = {
+        "q": query,
+        "count": 10,
+        "freshness": "day"
+    }
+    response = requests.get(url, headers=headers, params=params)
+    if response.status_code == 200:
+        return response.json().get("web", {}).get("results", [])
+    else:
+        raise Exception(f"Brave API error: {response.status_code} - {response.text}")
 
-print("📦 GPT RESPONSE:\n")
+# === Update Articles Sheet ===
+def update_articles_sheet(sheet, articles):
+    existing_links = set(sheet.col_values(4))
+    last_row = len(sheet.get_all_values()) + 2
+    today = datetime.now().strftime("%Y-%m-%d")
+    sheet.update(f"A{last_row}:D{last_row}", [[""]*4])
+    last_row += 1
+    for article in articles:
+        if article['url'] not in existing_links:
+            sheet.update(f"A{last_row}:D{last_row}", [[
+                today,
+                article['url'],
+                article['title'][:150],
+                article['url']
+            ]])
+            last_row += 1
 
-found_text = False
-for block in response.output:
-    print(f"🔍 Block type: {block.type}")  # 👈 show what's coming back
-    if block.type == "text":
-        found_text = True
-        print(block.text)
+# === Log Result ===
+def log_result(sheet, query, status, message):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    sheet.append_row([timestamp, query, status, message])
 
-if not found_text:
-    print("⚠️ No text output from GPT. It may have used a tool but not returned readable content.")
+# === Main ===
+def main():
+    spreadsheet = setup_google_sheets()
+    sites_sheet = spreadsheet.worksheet("Sites")
+    articles_sheet = spreadsheet.worksheet("Articles")
+    log_sheet = spreadsheet.worksheet("Log")
+
+    site_urls = sites_sheet.col_values(1)[1:]  # Skip header
+    if not site_urls:
+        log_result(log_sheet, "N/A", "⚠️ No Sites", "No site URLs found in Sites sheet.")
+        return
+
+    # ✅ Extract only the domain part
+    query = "AI articles " + " OR ".join([f"site:{url.split('/')[2]}" for url in site_urls if url.startswith("http")])
+    try:
+        results = search_brave(query)
+        if results:
+            update_articles_sheet(articles_sheet, results)
+            log_result(log_sheet, query, "✅ Success", f"{len(results)} articles pushed")
+        else:
+            log_result(log_sheet, query, "⚠️ No Results", "No fresh articles found")
+    except Exception as e:
+        log_result(log_sheet, query, "❌ Failure", str(e))
+
+if __name__ == "__main__":
+    main()
