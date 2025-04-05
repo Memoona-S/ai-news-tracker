@@ -86,6 +86,3 @@ if __name__ == "__main__":
     main()
 """
 
-# Save the final cleaned and filtered script
-with open("/mnt/data/main.py", "w") as f:
-    f.write(clean_filtered_script.strip())
