@@ -39,6 +39,7 @@ def parse_rss(feed_url):
     feed = feedparser.parse(feed_url)
     today = datetime.now().date()
     articles = []
+
     for entry in feed.entries:
         pub_date = None
 
@@ -49,25 +50,24 @@ def parse_rss(feed_url):
         elif hasattr(entry, 'published'):
             try:
                 pub_date = date_parser.parse(entry.published).date()
-            except:
-                continue
+            except Exception as e:
+                print(f"Error parsing published date: {e}")
         elif hasattr(entry, 'updated'):
             try:
                 pub_date = date_parser.parse(entry.updated).date()
-            except:
-                continue
+            except Exception as e:
+                print(f"Error parsing updated date: {e}")
 
-               if pub_date:
+        if pub_date:
             if pub_date == today:
-                ...
+                title = getattr(entry, 'title', 'No title')
+                link = getattr(entry, 'link', '')
+                articles.append([today.strftime("%Y-%m-%d"), feed_url, title[:150], link])
             else:
-                print(f"Skipped (Not Today): {entry.title} - {pub_date}")
+                print(f"⏩ Skipped (Not Today): {getattr(entry, 'title', 'No title')} - {pub_date}")
         else:
-            print(f"Skipped (No Date): {entry.title}")
+            print(f"⚠️ Skipped (No Date): {getattr(entry, 'title', 'No title')}")
 
-            title = getattr(entry, 'title', 'No title')
-            link = getattr(entry, 'link', '')
-            articles.append([today.strftime("%Y-%m-%d"), feed_url, title[:150], link])
     return articles
 
 def parse_html(url):
@@ -112,7 +112,7 @@ def main():
     sites_sheet = spreadsheet.worksheet("Sites")
     articles_sheet = spreadsheet.worksheet("Articles")
     log_sheet = spreadsheet.worksheet("Log")
-    urls = sites_sheet.col_values(1)[1:]  # Skip header
+    urls = sites_sheet.col_values(1)[1:]
 
     for url in urls:
         try:
