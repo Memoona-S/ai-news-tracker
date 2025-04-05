@@ -8,7 +8,7 @@ response = client.responses.create(
     input=[
         {
             "role": "user",
-            "content": "Search https://techcrunch.com/tag/ai/ and https://openai.com/blog for AI articles published today. Return the article title and full link in a two column list to paste in word."
+            "content": "Search https://techcrunch.com/tag/ai/ and https://openai.com/blog for AI articles published today. Return a bullet list of article titles and links. Only return the final answer. Do not include tool calls or say you searched the web. Just the final list.."
         }
     ],
     tool_choice="auto",
