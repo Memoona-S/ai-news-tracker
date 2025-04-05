@@ -1,3 +1,6 @@
+# Rewriting main.py with enhanced fallback logic and additional RSS patterns.
+# Also adding better error catching for non-responding or redirected pages.
+
 import os
 import requests
 import feedparser
@@ -15,14 +18,27 @@ def setup_google_sheets():
     spreadsheet = client.open("AI News Tracker")
     return spreadsheet
 
-# Detect RSS Feed
+# Detect RSS Feed from <link> tags or common paths
 def detect_rss_feed(base_url):
-    common_feeds = ["feed", "rss", "blog/rss", "news/rss", "tag/ai/feed"]
-    for path in common_feeds:
-        feed_url = base_url.rstrip("/") + "/" + path
-        feed = feedparser.parse(feed_url)
-        if feed.bozo == 0 and len(feed.entries) > 0:
-            return feed_url
+    try:
+        # 1. Try discovering from HTML meta tags
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        response = requests.get(base_url, headers=headers, timeout=10)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        for link in soup.find_all('link', type='application/rss+xml'):
+            href = link.get('href')
+            if href:
+                return href if href.startswith('http') else base_url.rstrip('/') + '/' + href.lstrip('/')
+
+        # 2. Try common feed paths
+        common_paths = ["feed", "rss", "blog/rss", "category/artificial-intelligence/feed", "tag/ai/feed"]
+        for path in common_paths:
+            test_url = base_url.rstrip("/") + "/" + path
+            feed = feedparser.parse(test_url)
+            if feed.bozo == 0 and len(feed.entries) > 0:
+                return test_url
+    except:
+        pass
     return None
 
 # Parse RSS Articles
@@ -31,28 +47,39 @@ def parse_rss(feed_url):
     today_str = datetime.now().strftime("%Y-%m-%d")
     articles = []
     for entry in feed.entries:
+        pub_date = None
         if hasattr(entry, 'published_parsed'):
-            published = datetime(*entry.published_parsed[:3]).strftime("%Y-%m-%d")
-            if published == today_str:
-                articles.append([today_str, feed_url, entry.title, entry.link])
+            pub_date = datetime(*entry.published_parsed[:3]).strftime("%Y-%m-%d")
+        elif hasattr(entry, 'updated_parsed'):
+            pub_date = datetime(*entry.updated_parsed[:3]).strftime("%Y-%m-%d")
+
+        if pub_date == today_str:
+            title = getattr(entry, 'title', 'No title')
+            link = getattr(entry, 'link', '')
+            articles.append([today_str, feed_url, title[:150], link])
     return articles
 
 # Fallback HTML Parsing
 def parse_html(url):
     try:
-        response = requests.get(url, timeout=10)
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        response = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
-        today_str = datetime.now().strftime("%Y/%m/%d")
-        alt_today_str = datetime.now().strftime("%Y-%m-%d")
+        today = datetime.now()
+        date_patterns = [
+            today.strftime("%Y/%m/%d"),
+            today.strftime("%Y-%m-%d"),
+            today.strftime("%Y%m%d")
+        ]
         articles = []
         for link in soup.find_all("a", href=True):
             href = link['href']
             text = link.get_text().strip()
-            if today_str in href or alt_today_str in href:
+            if any(date_pattern in href for date_pattern in date_patterns):
                 full_link = href if href.startswith("http") else url.rstrip("/") + "/" + href.lstrip("/")
-                articles.append([datetime.now().strftime("%Y-%m-%d"), url, text[:150], full_link])
+                articles.append([today.strftime("%Y-%m-%d"), url, text[:150], full_link])
         return articles
-    except Exception:
+    except:
         return []
 
 # Avoid duplicates and insert a one-line gap per date
@@ -60,11 +87,8 @@ def update_articles_sheet(sheet, new_articles):
     existing_links = set(cell.value for cell in sheet.col_values(4))
     last_row = len(sheet.get_all_values()) + 2
     today = datetime.now().strftime("%Y-%m-%d")
-
-    # Insert 1-line gap for the date
     sheet.update(f"A{last_row}:D{last_row}", [[""]*4])
     last_row += 1
-
     for article in new_articles:
         if article[3] not in existing_links:
             sheet.update(f"A{last_row}:D{last_row}", [article])
@@ -81,18 +105,19 @@ def main():
     sites_sheet = spreadsheet.worksheet("Sites")
     articles_sheet = spreadsheet.worksheet("Articles")
     log_sheet = spreadsheet.worksheet("Log")
-    
-    urls = sites_sheet.col_values(1)[1:]  # Skip header if present
+    urls = sites_sheet.col_values(1)[1:]
 
     for url in urls:
         try:
             rss_url = detect_rss_feed(url)
+            articles = []
+
             if rss_url:
                 articles = parse_rss(rss_url)
-                method = "RSS"
+                method = f"RSS ({rss_url})"
             else:
                 articles = parse_html(url)
-                method = "HTML"
+                method = "HTML fallback"
 
             if articles:
                 update_articles_sheet(articles_sheet, articles)
