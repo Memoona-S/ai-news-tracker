@@ -1,6 +1,3 @@
-from dateutil import parser as date_parser
-
-main_py_with_dateutil = """
 import os
 import requests
 import feedparser
@@ -108,7 +105,7 @@ def main():
     sites_sheet = spreadsheet.worksheet("Sites")
     articles_sheet = spreadsheet.worksheet("Articles")
     log_sheet = spreadsheet.worksheet("Log")
-    urls = sites_sheet.col_values(1)[1:]
+    urls = sites_sheet.col_values(1)[1:]  # Skip header
 
     for url in urls:
         try:
@@ -129,3 +126,6 @@ def main():
                 log_result(log_sheet, url, "⚠️ No new articles", f"No articles found today via {method}")
         except Exception as e:
             log_result(log_sheet, url, "❌ Failure", str(e))
+
+if __name__ == "__main__":
+    main()
