@@ -17,9 +17,10 @@ creds_dict = eval(os.getenv("GOOGLE_CREDENTIALS_JSON"))
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 gsheet = gspread.authorize(creds)
-sheet = gsheet.open("AI News Tracker")
-article_sheet = gsheet.worksheet("Articles")
-log_sheet = gsheet.worksheet("Logs")
+spreadsheet = gsheet.open("AI News Tracker")
+article_sheet = spreadsheet.worksheet("Articles")
+log_sheet = spreadsheet.worksheet("Logs")
+
 
 # === Load custom selectors ===
 with open("parsers.json") as f:
