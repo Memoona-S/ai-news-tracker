@@ -1,3 +1,5 @@
+# Re-run the code to regenerate the file after environment reset
+clean_filtered_script = """
 import os
 import requests
 from datetime import datetime
@@ -15,7 +17,7 @@ def setup_google_sheets():
 
 # === Call Brave Search API ===
 def search_brave(query):
-    api_key = os.getenv("OPENAI_API_KEY")  # Brave key stored under OpenAI variable
+    api_key = os.getenv("OPENAI_API_KEY")  # Using same secret key name
     url = "https://api.search.brave.com/res/v1/web/search"
     headers = {
         "Accept": "application/json",
@@ -32,20 +34,21 @@ def search_brave(query):
     else:
         raise Exception(f"Brave API error: {response.status_code} - {response.text}")
 
-# === Update Articles Sheet ===
-def update_articles_sheet(sheet, articles):
+# === Update Articles Sheet (with domain filter) ===
+def update_articles_sheet(sheet, articles, allowed_domains):
     existing_links = set(sheet.col_values(4))
     last_row = len(sheet.get_all_values()) + 2
     today = datetime.now().strftime("%Y-%m-%d")
     sheet.update(f"A{last_row}:D{last_row}", [[""] * 4])
     last_row += 1
     for article in articles:
-        if article['url'] not in existing_links:
+        url = article['url']
+        if url not in existing_links and any(domain in url for domain in allowed_domains):
             sheet.update(f"A{last_row}:D{last_row}", [[
                 today,
-                article['url'],
+                url,
                 article['title'][:150],
-                article['url']
+                url
             ]])
             last_row += 1
 
@@ -66,15 +69,14 @@ def main():
         log_result(log_sheet, "N/A", "⚠️ No Sites", "No site URLs found in Sites sheet.")
         return
 
-    # ✅ Extract just the domain name from each URL
-    domains = [f"site:{url.split('/')[2]}" for url in site_urls if url.startswith("http")]
-    query = "AI articles " + " OR ".join(domains)
+    domains = [url.split('/')[2] for url in site_urls if url.startswith("http")]
+    query = "AI articles " + " OR ".join([f"site:{d}" for d in domains])
 
     try:
         results = search_brave(query)
         if results:
-            update_articles_sheet(articles_sheet, results)
-            log_result(log_sheet, query, "✅ Success", f"{len(results)} articles pushed")
+            update_articles_sheet(articles_sheet, results, domains)
+            log_result(log_sheet, query, "✅ Success", f"{len(results)} articles filtered and pushed")
         else:
             log_result(log_sheet, query, "⚠️ No Results", "No fresh articles found")
     except Exception as e:
@@ -82,3 +84,8 @@ def main():
 
 if __name__ == "__main__":
     main()
+"""
+
+# Save the final cleaned and filtered script
+with open("/mnt/data/main.py", "w") as f:
+    f.write(clean_filtered_script.strip())
