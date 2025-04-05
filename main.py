@@ -1,3 +1,6 @@
+# Updated main.py with correct domain extraction logic for Brave query building
+
+fixed_brave_script = """
 import os
 import requests
 from datetime import datetime
@@ -15,7 +18,7 @@ def setup_google_sheets():
 
 # === Call Brave Search API ===
 def search_brave(query):
-    api_key = os.getenv("OPENAI_API_KEY")  # ✅ Use same secret key name
+    api_key = os.getenv("OPENAI_API_KEY")
     url = "https://api.search.brave.com/res/v1/web/search"
     headers = {
         "Accept": "application/json",
@@ -66,7 +69,8 @@ def main():
         log_result(log_sheet, "N/A", "⚠️ No Sites", "No site URLs found in Sites sheet.")
         return
 
-    query = "AI articles " + " OR ".join([f"site:{url.replace('https://', '').replace('www.', '').strip('/')}" for url in site_urls])
+    # ✅ Extract only the domain part
+    query = "AI articles " + " OR ".join([f"site:{url.split('/')[2]}" for url in site_urls if url.startswith("http")])
     try:
         results = search_brave(query)
         if results:
@@ -79,3 +83,8 @@ def main():
 
 if __name__ == "__main__":
     main()
+"""
+
+# Save the fixed version to main.py
+with open("/mnt/data/main.py", "w") as f:
+    f.write(fixed_brave_script.strip())
