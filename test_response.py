@@ -8,7 +8,7 @@ response = client.responses.create(
     input=[
         {
             "role": "user",
-            "content": "Search https://techcrunch.com/tag/ai/ and https://openai.com/blog for AI articles published today. Return a bullet list of article titles and links. Only return the final answer. Do not include tool calls or say you searched the web. Just the final list.."
+            "content": "Search https://techcrunch.com/category/artificial-intelligence/ and https://analyticsindiamag.com/ai-news-updates/ for AI articles published today. Return a bullet list of article titles and links. Only return the final answer. Do not include tool calls or say you searched the web. Just the final list.."
         }
     ],
     tool_choice="auto",
