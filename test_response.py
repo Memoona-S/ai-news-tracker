@@ -8,7 +8,7 @@ response = client.responses.create(
     input=[
         {
             "role": "user",
-            "content": "Search https://techcrunch.com/tag/ai/ and https://openai.com/blog for AI articles published today. Return the article title and full link in a bullet list."
+            "content": "Search https://techcrunch.com/tag/ai/ and https://openai.com/blog for AI articles published today. Return the article title and full link in a two column list to paste in word."
         }
     ],
     tool_choice="auto",
@@ -20,6 +20,13 @@ response = client.responses.create(
 )
 
 print("📦 GPT RESPONSE:\n")
+
+found_text = False
 for block in response.output:
+    print(f"🔍 Block type: {block.type}")  # 👈 show what's coming back
     if block.type == "text":
+        found_text = True
         print(block.text)
+
+if not found_text:
+    print("⚠️ No text output from GPT. It may have used a tool but not returned readable content.")
