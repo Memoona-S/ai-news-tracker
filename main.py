@@ -21,7 +21,6 @@ spreadsheet = gsheet.open("AI News Tracker")
 article_sheet = spreadsheet.worksheet("Articles")
 log_sheet = spreadsheet.worksheet("Logs")
 
-
 # === Load custom selectors ===
 with open("parsers.json") as f:
     selector_config = json.load(f)
