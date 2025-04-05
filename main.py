@@ -57,7 +57,14 @@ def parse_rss(feed_url):
             except:
                 continue
 
-        if pub_date == today:
+               if pub_date:
+            if pub_date == today:
+                ...
+            else:
+                print(f"Skipped (Not Today): {entry.title} - {pub_date}")
+        else:
+            print(f"Skipped (No Date): {entry.title}")
+
             title = getattr(entry, 'title', 'No title')
             link = getattr(entry, 'link', '')
             articles.append([today.strftime("%Y-%m-%d"), feed_url, title[:150], link])
