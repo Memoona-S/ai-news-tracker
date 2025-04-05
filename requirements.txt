@@ -1,6 +1,6 @@
-openai>=1.0.0
+requests
+feedparser
+beautifulsoup4
 gspread
 oauth2client
-requests
-beautifulsoup4
 
