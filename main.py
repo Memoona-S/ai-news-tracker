@@ -1,4 +1,3 @@
-# Updated main.py content with robust date parsing using dateutil.parser
 from dateutil import parser as date_parser
 
 main_py_with_dateutil = """
@@ -130,11 +129,3 @@ def main():
                 log_result(log_sheet, url, "⚠️ No new articles", f"No articles found today via {method}")
         except Exception as e:
             log_result(log_sheet, url, "❌ Failure", str(e))
-
-if __name__ == "__main__":
-    main()
-"""
-
-# Save updated main.py
-with open("/mnt/data/main.py", "w") as f:
-    f.write(main_py_with_dateutil.strip())
