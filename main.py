@@ -1,148 +1,105 @@
-# === scalable_news_scraper/main.py ===
 import os
-import json
 import requests
-import gspread
-from openai import OpenAI
-from datetime import datetime
-from urllib.parse import urlparse
+import feedparser
 from bs4 import BeautifulSoup
+from datetime import datetime
+import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
-# === Load API Keys ===
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-creds_dict = eval(os.getenv("GOOGLE_CREDENTIALS_JSON"))
+# Setup Google Sheets
+def setup_google_sheets():
+    creds_dict = eval(os.getenv("GOOGLE_CREDENTIALS_JSON"))
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    client = gspread.authorize(creds)
+    spreadsheet = client.open("AI News Tracker")
+    return spreadsheet
 
-# === Google Sheets Setup ===
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-gsheet = gspread.authorize(creds)
-spreadsheet = gsheet.open("AI News Tracker")
-article_sheet = spreadsheet.worksheet("Articles")
-log_sheet = spreadsheet.worksheet("Logs")
+# Detect RSS Feed
+def detect_rss_feed(base_url):
+    common_feeds = ["feed", "rss", "blog/rss", "news/rss", "tag/ai/feed"]
+    for path in common_feeds:
+        feed_url = base_url.rstrip("/") + "/" + path
+        feed = feedparser.parse(feed_url)
+        if feed.bozo == 0 and len(feed.entries) > 0:
+            return feed_url
+    return None
 
-# === Load custom selectors ===
-with open("parsers.json") as f:
-    selector_config = json.load(f)
+# Parse RSS Articles
+def parse_rss(feed_url):
+    feed = feedparser.parse(feed_url)
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    articles = []
+    for entry in feed.entries:
+        if hasattr(entry, 'published_parsed'):
+            published = datetime(*entry.published_parsed[:3]).strftime("%Y-%m-%d")
+            if published == today_str:
+                articles.append([today_str, feed_url, entry.title, entry.link])
+    return articles
 
-# === Load sites ===
-with open("Sites.txt") as f:
-    urls = [line.strip() for line in f if line.strip()]
-
-# === Load prompt template ===
-with open("prompt.txt") as f:
-    prompt_template = f.read().strip()
-
-# === Load existing links ===
-try:
-    existing_links = set(article_sheet.col_values(3))  # 3rd column = Link
-    print(f"📌 Loaded {len(existing_links)} existing links.")
-except Exception as e:
-    print(f"⚠️ Could not load existing links: {e}")
-    existing_links = set()
-
-# === Count runs today ===
-today = datetime.now().strftime("%Y-%m-%d")
-log_records = log_sheet.get_all_values()
-daily_count = sum(1 for row in log_records if row and row[0] == today) + 1
-
-# === Start processing ===
-total_added = 0
-
-def get_domain(url):
-    return urlparse(url).netloc.replace("www.", "")
-
-def extract_links(soup, url):
-    domain = get_domain(url)
-    selector = selector_config.get(domain, selector_config.get("default", {})).get("selector", "a[href]")
-    print(f"🔧 Using selector for {domain}: {selector}")
-
-    elements = soup.select(selector)
-    links = []
-
-    for el in elements:
-        if not el.has_attr("href"): continue
-        text = el.get_text(separator=" ").strip()
-        if text and len(text) > 10:
-            full_url = requests.compat.urljoin(url, el['href'])
-            links.append(f"{text} | {full_url}")
-        if len(links) >= 10:
-            break
-
-    return links
-
-# === Loop through each URL ===
-for url in urls:
-    print(f"\n🔍 Scraping: {url}")
-    domain = get_domain(url)
-    source_name = domain.split(".")[0].capitalize()
-    added = 0
-    status = "✅ Success"
-    fail_msg = ""
-
+# Fallback HTML Parsing
+def parse_html(url):
     try:
-        res = requests.get(url, timeout=10)
-        res.raise_for_status()
-        soup = BeautifulSoup(res.text, "html.parser")
+        response = requests.get(url, timeout=10)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        today_str = datetime.now().strftime("%Y/%m/%d")
+        alt_today_str = datetime.now().strftime("%Y-%m-%d")
+        articles = []
+        for link in soup.find_all("a", href=True):
+            href = link['href']
+            text = link.get_text().strip()
+            if today_str in href or alt_today_str in href:
+                full_link = href if href.startswith("http") else url.rstrip("/") + "/" + href.lstrip("/")
+                articles.append([datetime.now().strftime("%Y-%m-%d"), url, text[:150], full_link])
+        return articles
+    except Exception:
+        return []
 
-        links = extract_links(soup, url)
+# Avoid duplicates and insert a one-line gap per date
+def update_articles_sheet(sheet, new_articles):
+    existing_links = set(cell.value for cell in sheet.col_values(4))
+    last_row = len(sheet.get_all_values()) + 2
+    today = datetime.now().strftime("%Y-%m-%d")
 
-        if not links:
-            print("⚠️ No links found. Writing fallback row.")
-            article_sheet.append_row(["No articles", f"No articles found for {today}", "No articles", source_name])
-            status = "⚠️ No articles"
-        else:
-            print("🔗 Found links:")
-            for l in links: print("→", l)
+    # Insert 1-line gap for the date
+    sheet.update(f"A{last_row}:D{last_row}", [[""]*4])
+    last_row += 1
 
-            content = "\n".join(links)
-            prompt = prompt_template.replace("{{URL}}", url).replace("{{CONTENT}}", content)
+    for article in new_articles:
+        if article[3] not in existing_links:
+            sheet.update(f"A{last_row}:D{last_row}", [article])
+            last_row += 1
 
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": "You extract article titles, summaries, and links."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.2
-            )
+# Log to 'Log' sheet
+def log_result(log_sheet, website, status, message):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_sheet.append_row([timestamp, website, status, message])
 
-            result = response.choices[0].message.content.strip()
-            print("🧾 GPT Result:\n", result)
+# Main execution
+def main():
+    spreadsheet = setup_google_sheets()
+    sites_sheet = spreadsheet.worksheet("Sites")
+    articles_sheet = spreadsheet.worksheet("Articles")
+    log_sheet = spreadsheet.worksheet("Log")
+    
+    urls = sites_sheet.col_values(1)[1:]  # Skip header if present
 
-            rows = result.split("\n")[1:]  # Skip header
+    for url in urls:
+        try:
+            rss_url = detect_rss_feed(url)
+            if rss_url:
+                articles = parse_rss(rss_url)
+                method = "RSS"
+            else:
+                articles = parse_html(url)
+                method = "HTML"
 
-            for row in rows:
-                if not row.strip(): continue
-                cols = [c.strip() for c in row.split("|")]
-                if len(cols) != 3: print(f"⚠️ Bad row: {row}"); continue
+            if articles:
+                update_articles_sheet(articles_sheet, articles)
+                log_result(log_sheet, url, "✅ Success", f"{len(articles)} articles via {method}")
+            else:
+                log_result(log_sheet, url, "⚠️ No new articles", f"No articles found today via {method}")
+        except Exception as e:
+            log_result(log_sheet, url, "❌ Failure", str(e))
 
-                title, summary, link = cols
-                if not link.startswith("http") or link in existing_links:
-                    print(f"⏩ Skipped: {link}")
-                    continue
-
-                article_sheet.append_row([title, summary, link, source_name])
-                existing_links.add(link)
-                total_added += 1
-                added += 1
-
-            if added == 0:
-                article_sheet.append_row(["No articles", f"No articles found for {today}", "No articles", source_name])
-                status = "⚠️ No new entries"
-
-    except Exception as e:
-        status = "❌ Error"
-        fail_msg = str(e)
-        article_sheet.append_row(["Connection Error", fail_msg, "Connection failed", source_name])
-
-    log_sheet.append_row([
-        today,
-        daily_count,
-        source_name,
-        status,
-        added,
-        fail_msg
-    ])
-
-print(f"\n📊 DONE. Total new articles added: {total_added}")
+main()
