@@ -8,16 +8,16 @@ response = client.responses.create(
     input=[
         {
             "role": "user",
-            "content": "Search the following sites and return today's AI-related articles with title and link:\n\n1. https://techcrunch.com/tag/ai/\n2. https://openai.com/blog"
+            "content": "Search https://techcrunch.com/tag/ai/ and https://openai.com/blog for AI articles published today. Return the article title and full link in a bullet list."
         }
     ],
+    tool_choice="auto",
     tools=[
         {
-            "type": "tool",
-            "tool": "web_search"
+            "type": "web_search"
         }
     ]
 )
 
-print("📦 GPT RESPONSE:")
-print(response.output_text)
+print("📦 GPT RESPONSE:\n")
+print(response.output.text)
