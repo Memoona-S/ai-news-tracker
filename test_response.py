@@ -20,4 +20,6 @@ response = client.responses.create(
 )
 
 print("📦 GPT RESPONSE:\n")
-print(response.output.text)
+for block in response.output:
+    if block.type == "text":
+        print(block.text)
