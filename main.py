@@ -1,5 +1,3 @@
-# Re-run the code to regenerate the file after environment reset
-clean_filtered_script = """
 import os
 import requests
 from datetime import datetime
@@ -17,7 +15,7 @@ def setup_google_sheets():
 
 # === Call Brave Search API ===
 def search_brave(query):
-    api_key = os.getenv("OPENAI_API_KEY")  # Using same secret key name
+    api_key = os.getenv("OPENAI_API_KEY")  # using same key name for Brave
     url = "https://api.search.brave.com/res/v1/web/search"
     headers = {
         "Accept": "application/json",
@@ -34,7 +32,7 @@ def search_brave(query):
     else:
         raise Exception(f"Brave API error: {response.status_code} - {response.text}")
 
-# === Update Articles Sheet (with domain filter) ===
+# === Update Articles Sheet (only from allowed domains) ===
 def update_articles_sheet(sheet, articles, allowed_domains):
     existing_links = set(sheet.col_values(4))
     last_row = len(sheet.get_all_values()) + 2
@@ -52,12 +50,12 @@ def update_articles_sheet(sheet, articles, allowed_domains):
             ]])
             last_row += 1
 
-# === Log Result ===
+# === Log Run Outcome ===
 def log_result(sheet, query, status, message):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     sheet.append_row([timestamp, query, status, message])
 
-# === Main Execution ===
+# === Main ===
 def main():
     spreadsheet = setup_google_sheets()
     sites_sheet = spreadsheet.worksheet("Sites")
@@ -84,5 +82,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-"""
-
