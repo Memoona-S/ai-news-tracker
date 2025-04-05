@@ -2,6 +2,7 @@ import os
 import requests
 from datetime import datetime
 import gspread
+from urllib.parse import urlparse
 from oauth2client.service_account import ServiceAccountCredentials
 
 # === Setup Google Sheets ===
@@ -13,7 +14,7 @@ def setup_google_sheets():
     spreadsheet = client.open("AI News Tracker")
     return spreadsheet
 
-# === Call Brave Search API ===
+# === Brave API Search ===
 def search_brave(query):
     api_key = os.getenv("OPENAI_API_KEY")
     url = "https://api.search.brave.com/res/v1/web/search"
@@ -23,7 +24,7 @@ def search_brave(query):
     }
     params = {
         "q": query,
-        "count": 10,
+        "count": 20,
         "freshness": "day"
     }
     response = requests.get(url, headers=headers, params=params)
@@ -32,47 +33,61 @@ def search_brave(query):
     else:
         raise Exception(f"Brave API error: {response.status_code} - {response.text}")
 
-# === Update Articles Sheet ===
-def update_articles_sheet(sheet, articles):
+# === Extract domain from URL ===
+def extract_domain(url):
+    return urlparse(url).netloc.replace("www.", "").lower().strip()
+
+# === Push new articles from allowed domains only ===
+def update_articles_sheet(sheet, articles, allowed_domains, log_sheet):
     existing_links = set(sheet.col_values(4))
     last_row = len(sheet.get_all_values()) + 2
     today = datetime.now().strftime("%Y-%m-%d")
-    sheet.update(f"A{last_row}:D{last_row}", [[""]*4])
+    sheet.update(f"A{last_row}:D{last_row}", [[""] * 4])
     last_row += 1
+    pushed, skipped = 0, 0
+
     for article in articles:
-        if article['url'] not in existing_links:
+        url = article["url"]
+        domain = extract_domain(url)
+        if url not in existing_links and domain in allowed_domains:
             sheet.update(f"A{last_row}:D{last_row}", [[
                 today,
-                article['url'],
-                article['title'][:150],
-                article['url']
+                domain,
+                article["title"][:150],
+                url
             ]])
             last_row += 1
+            pushed += 1
+        else:
+            skipped += 1
+            log_result(log_sheet, url, "⛔ Skipped", f"{article['title'][:80]} | domain={domain}")
+    return pushed, skipped
 
-# === Log Result ===
+# === Log result ===
 def log_result(sheet, query, status, message):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     sheet.append_row([timestamp, query, status, message])
 
-# === Main ===
+# === Main process ===
 def main():
     spreadsheet = setup_google_sheets()
     sites_sheet = spreadsheet.worksheet("Sites")
     articles_sheet = spreadsheet.worksheet("Articles")
     log_sheet = spreadsheet.worksheet("Log")
 
-    site_urls = sites_sheet.col_values(1)[1:]  # Skip header
+    site_urls = sites_sheet.col_values(1)[1:]
     if not site_urls:
         log_result(log_sheet, "N/A", "⚠️ No Sites", "No site URLs found in Sites sheet.")
         return
 
-    # ✅ Extract only the domain part
-    query = "AI articles " + " OR ".join([f"site:{url.split('/')[2]}" for url in site_urls if url.startswith("http")])
+    allowed_domains = [extract_domain(url) for url in site_urls if url.startswith("http")]
+    query = "latest AI articles " + " OR ".join([f"site:{d}" for d in allowed_domains])
+
     try:
         results = search_brave(query)
         if results:
-            update_articles_sheet(articles_sheet, results)
-            log_result(log_sheet, query, "✅ Success", f"{len(results)} articles pushed")
+            pushed, skipped = update_articles_sheet(articles_sheet, results, allowed_domains, log_sheet)
+            log_result(log_sheet, query, "✅ Success", f"{pushed} pushed / {skipped} skipped")
         else:
             log_result(log_sheet, query, "⚠️ No Results", "No fresh articles found")
     except Exception as e:
